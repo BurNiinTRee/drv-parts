@@ -7,6 +7,36 @@
   l = lib // builtins;
   t = l.types;
 
+  makeLegacyModule = pkg: ({config, ...}: {
+    options = {
+      overrideAttrs = l.mkOption {
+        type = t.nullOr (t.listOf (t.functionTo t.attrs));
+        apply = x: if l.isNull x then x else l.toList x;
+        default = null;
+      };
+      override = l.mkOption {
+        type = t.nullOr t.attrs;
+        default = null;
+      };
+      rootPkg = l.mkOption {
+        type = t.attrs;
+        default = pkg;
+      };
+    };
+    config = let
+      mergedOverrideAttrs =
+        l.foldl
+        (prev: this: x: this (prev x))
+        l.id
+        config.overrideAttrs;
+      overriddenPackage = if l.isNull config.override then config.rootPkg else config.rootPkg.override config.override;
+      attrOverriddenPackage = if l.isNull config.overrideAttrs then overriddenPackage else overriddenPackage.overrideAttrs mergedOverrideAttrs;
+    in {
+      rootPkg = pkg;
+      final.derivation = attrOverriddenPackage;
+    };
+  });
+
   passAsFile =
     if config.passAsFile == null
     then {}
@@ -39,12 +69,11 @@
     Specify the top-level option instead, or rename the environment variable.
   '';
 
-  # all args that are massed directly to mkDerivation
+  # all args that are passed directly to mkDerivation
   args =
     finalArgs
-    // envChecked
-    ;
-
+    // envChecked;
 in {
+  config.deps = l.mapAttrs (_: makeLegacyModule) config.depsLegacy;
   config.final.derivation-args = args;
 }

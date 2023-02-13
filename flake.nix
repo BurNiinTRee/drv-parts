@@ -35,7 +35,9 @@
             nix flake check "$example" -L \
               --show-trace \
               --no-write-lock-file \
-              --override-input drv-parts ${self}
+              --override-input drv-parts ${self} \
+              # --debugger
+
           done
           for example in $(find ./examples/no-flake/ -type f); do
             echo "building example $example"

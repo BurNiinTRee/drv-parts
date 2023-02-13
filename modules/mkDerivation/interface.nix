@@ -1,4 +1,9 @@
-{config, lib, ...}: let
+{
+  config,
+  lib,
+  drv-parts,
+  ...
+}: let
   l = lib // builtins;
   t = l.types;
   optNullOrStr = l.mkOption {
@@ -9,6 +14,25 @@
     type = t.nullOr (t.listOf t.anything);
     default = null;
   };
+  optDepsList = host: target:
+    l.mkOption {
+      type = t.nullOr (t.listOf (t.submoduleWith {
+        modules = [
+          drv-parts.modules.drv-parts.derivation-common
+          {
+            freeformType = t.attrs;
+            config = {
+              inherit host target;
+            };
+          }
+        ];
+      }));
+      default = null;
+      apply = xs:
+        if l.isNull xs
+        then null
+        else map (x: x.final.derivation) xs;
+    };
   optListOfStr = l.mkOption {
     type = t.nullOr (t.listOf t.str);
     default = null;
@@ -33,6 +57,7 @@
   drvPartsOptions = {
     stdenv = l.mkOption {
       type = t.attrs;
+      default = config.deps.stdenv.final.derivation;
     };
   };
 
@@ -41,20 +66,20 @@
     builder = optPackage;
 
     # make-derivation args - defaultEmptyList
-    depsBuildBuild = optList;
-    depsBuildBuildPropagated = optList;
-    nativeBuildInputs = optList;
-    propagatedNativeBuildInputs = optList;
-    depsBuildTarget = optList;
-    depsBuildTargetPropagated = optList;
-    depsHostHost = optList;
-    depsHostHostPropagated = optList;
-    buildInputs = optList;
-    propagatedBuildInputs = optList;
-    depsTargetTarget = optList;
-    depsTargetTargetPropagated = optList;
-    checkInputs = optList;
-    installCheckInputs = optList;
+    depsBuildBuild = optDepsList "Build" "Build";
+    depsBuildBuildPropagated = optDepsList "Build" "Build";
+    nativeBuildInputs = optDepsList "Build" "Host";
+    propagatedNativeBuildInputs = optDepsList "Build" "Host";
+    depsBuildTarget = optDepsList "Build" "Target";
+    depsBuildTargetPropagated = optDepsList "Build" "Target";
+    depsHostHost = optDepsList "Host" "Host";
+    depsHostHostPropagated = optDepsList "Host" "Host";
+    buildInputs = optDepsList "Host" "Target";
+    propagatedBuildInputs = optDepsList "Host" "Target";
+    depsTargetTarget = optDepsList "Target" "Target";
+    depsTargetTargetPropagated = optDepsList "Target" "Target";
+    checkInputs = optDepsList "Host" "Target"; # ???
+    installCheckInputs = optDepsList "Host" "Target"; # ???
     configureFlags = optList;
     cmakeFlags = optList;
     mesonFlags = optList;
@@ -64,7 +89,7 @@
     strictDeps = optNullOrBool;
     enableParallelBuilding = optNullOrBool;
     meta = optAttrs;
-    passthru  = optAttrs;
+    passthru = optAttrs;
     pos = optAttrs;
     separateDebugInfo = optNullOrBool;
     __darwinAllowLocalNetworking = optNullOrBool;
@@ -75,7 +100,6 @@
     hardeningEnable = optList;
     hardeningDisable = optList;
     patches = optList;
-
 
     # make-derivation args - without defaults
     enableParallelChecking = optNullOrBool;
@@ -193,7 +217,6 @@
     tarballs = optList;
     dontCopyDist = optNullOrBool;
   };
-
 in {
   imports = [
     ../derivation-common/interface.nix

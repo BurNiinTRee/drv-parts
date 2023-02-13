@@ -1,5 +1,6 @@
 {config, lib, drv-parts, ...}: let
-  deps = config.deps;
+  deps = #builtins.debug 
+    (lib.mapAttrs (n: v: lib.attrByPath ["final" "derivation"] (throw "final.derivation is not set") v) config.deps);
 in {
 
   # select mkDerivation as a backend for this package
@@ -19,7 +20,7 @@ in {
     flags.sensorsSupport = lib.mkDefault config.stdenv.isLinux;
     flags.systemdSupport = lib.mkDefault config.stdenv.isLinux;
 
-    deps = {pkgs, ...}: {
+    deps = {pkgs, ...}: builtins.mapAttrs (n: v: {freeformType = lib.types.raw; final.derivation = v;}) {
       inherit (pkgs)
         autoreconfHook
         fetchFromGitHub

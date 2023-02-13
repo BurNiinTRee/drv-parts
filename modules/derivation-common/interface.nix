@@ -1,6 +1,13 @@
-{config, lib, dependencySets, ...}: let
+{
+  config,
+  lib,
+  dependencySets,
+  drv-parts,
+  ...
+}: let
   l = lib // builtins;
   t = l.types;
+  config' = config;
   optNullOrBool = l.mkOption {
     type = t.nullOr t.bool;
     default = null;
@@ -13,11 +20,12 @@
     type = t.nullOr t.str;
     default = null;
   };
-  mkFlag = description: l.mkOption {
-    inherit description;
-    type = t.bool;
-    default = false;
-  };
+  mkFlag = description:
+    l.mkOption {
+      inherit description;
+      type = t.bool;
+      default = false;
+    };
 
   # options forwarded to the final derivation function call
   forwardedOptions = {
@@ -56,30 +64,30 @@
     };
 
     /*
-      Helper option to define `flags`.
-      This makes the syntax for defining flags simpler and at the same time
-        prevents users to make mistakes like, for example, defining flags with
-        other types than bool.
+    Helper option to define `flags`.
+    This makes the syntax for defining flags simpler and at the same time
+      prevents users to make mistakes like, for example, defining flags with
+      other types than bool.
 
-      This allows flags to be defined like this:
-      {
-        config.flagsOffered = {
-          enableFoo = "builds with foo support";
-          ...
+    This allows flags to be defined like this:
+    {
+      config.flagsOffered = {
+        enableFoo = "builds with foo support";
+        ...
+      };
+    }
+
+    ... instead of this:
+    {
+      options.flags = {
+        enableFoo = l.mkOption {
+          type = t.bool;
+          description = "builds with foo support";
+          default = false;
         };
+        ...
       }
-
-      ... instead of this:
-      {
-        options.flags = {
-          enableFoo = l.mkOption {
-            type = t.bool;
-            description = "builds with foo support";
-            default = false;
-          };
-          ...
-        }
-      }
+    }
 
     */
     flagsOffered = l.mkOption {
@@ -103,11 +111,30 @@
       type = t.package;
     };
 
-    /*
-      This allows defining drvs in an encapsulated manner, while maintaining
-        the capability to depend on external attributes
-    */
     deps = l.mkOption {
+      description = ''
+        Modules for dependencies available as a module.
+        Here the package writer or user can also specify any options required.
+      '';
+      type = t.attrsOf (t.submoduleWith {
+        specialArgs = {inherit drv-parts;};
+        modules = [
+          (
+            {config, ...}: {
+              # freeformType = t.attrs;
+              config._module.args = {inherit dependencySets;};
+              config.legacySets = config'.legacySets // {pkgs = config'.legacySets.pkgs."pkgs${config.host}${config.target}";};
+            }
+          )
+        ];
+      });
+    };
+
+    /*
+    This allows defining drvs in an encapsulated manner, while maintaining
+      the capability to depend on external attributes
+    */
+    depsLegacy = l.mkOption {
       description = ''
         All dependencies of the package. This option should be set by the "outer world" and can be used to inherit attributes from `pkgs` or `inputs` etc.
 
@@ -119,8 +146,12 @@
       type = t.submoduleWith {
         # TODO: This could be made stricter by removing the freeformType
         # Maybe add option `strictDeps = true/false` ? ;P
-        modules = [{freeformType = t.lazyAttrsOf t.raw;}];
-        specialArgs = dependencySets;
+        modules = [
+          {
+            freeformType = t.lazyAttrsOf t.raw;
+            config._module.args = config.legacySets;
+          }
+        ];
       };
       example = lib.literalExpression ''
         {pkgs, inputs', ...}: {
@@ -129,13 +160,27 @@
           nix = inputs'.nix.packages.default;
         }
       '';
+      default = {};
+    };
+
+    host = l.mkOption {
+      type = t.enum ["Build" "Host" "Target"];
+      default = "Host";
+    };
+    target = l.mkOption {
+      type = t.enum ["Build" "Host" "Target"];
+      default = "Target";
+    };
+    legacySets = l.mkOption {
+      description = ''
+        An attribute set which is passed as arguments to the `depsLegacy` function
+      '';
     };
 
     env = lib.mkOption {
       type = t.attrsOf (t.oneOf [t.bool t.int t.str t.path t.package]);
       default = {};
     };
-
   };
 in {
   config.argsForward = l.mapAttrs (_: _: true) forwardedOptions;
